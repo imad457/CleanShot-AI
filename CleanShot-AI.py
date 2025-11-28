@@ -9,9 +9,13 @@ import sys
 import math
 import argparse
 import random
+import warnings
 from multiprocessing import Pool, cpu_count
 import numpy as np
 from PIL import Image, ImageFilter, ImageEnhance
+
+# ✅ Suppress Pillow DeprecationWarning
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="PIL")
 
 TOOL_NAME = "CleanShot Pro Ultimate"
 VERSION = "2.3"
@@ -69,10 +73,11 @@ def color_pipeline(img, preset="light"):
         new_gray = np.real(np.fft.ifft2(F))
         gray = 0.98*gray + 0.02*np.clip(new_gray, 0, 255)
     
-    # 3. HSV color preservation (modify Value only)
+    # 3. HSV color preservation (Fixed for Pillow 13+ compatibility)
     hsv = np.array(img.convert('HSV'))
     hsv[:,:,2] = gray.astype(np.uint8)
-    result = Image.fromarray(hsv, 'HSV').convert('RGB')
+    hsv_pil = Image.fromarray(hsv)  # Pillow auto-detects mode
+    result = hsv_pil.convert('RGB')
     
     # 4. Final subtle adjustments
     if params["color"] > 0: 
@@ -129,7 +134,7 @@ def main():
     print(f"🛡️  {TOOL_NAME} v{VERSION}  🛡️")
     print(f"📧  Author: {AUTHOR_EMAIL}")
     print(f"🚀  Processing {len(files)} image(s) with preset '{args.preset}' using {threads} thread(s)...\n")
-    print("✨  All output PNG images will have metadata removed  ✨\n")
+    print("✨  All output PNG images will have metadata removed | AI Fingerprint: Scrambled ✨\n")
     
     with Pool(threads) as pool:
         results = pool.map(process_file, [(f, args.out, args.preset) for f in files])
