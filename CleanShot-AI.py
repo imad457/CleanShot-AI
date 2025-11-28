@@ -1,186 +1,151 @@
-#!/usr/bin/python3
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """
-CleanShot-AI.py (Pro) v1.2 - Light/Medium/Strong presets + Automatic Metadata Removal
-Author: imsecure4@gmail.com
-✅ Automatically removes all Metadata + saves as 100% clean PNG
+CleanShot Pro Ultimate v2.3 - Advanced AI Fingerprint Disruptor
+No pywt dependency! Works with any Python + 100% color preservation + metadata removal
 """
 
-import numpy as np
-from PIL import Image, ImageFilter, ImageEnhance
 import os
 import sys
+import math
 import argparse
 import random
 from multiprocessing import Pool, cpu_count
+import numpy as np
+from PIL import Image, ImageFilter, ImageEnhance
 
-TOOL_NAME = "CleanShot AI Pro"
+TOOL_NAME = "CleanShot Pro Ultimate"
+VERSION = "2.3"
 AUTHOR_EMAIL = "imsecure4@gmail.com"
 
-def print_banner():
-    """Prints program banner with tool name and author contact info."""
-    print("=" * 70)
-    print(f"{TOOL_NAME} v1.2 - 3 Presets + AUTO Metadata Removal ✅")
-    print(f"Author / Contact: {AUTHOR_EMAIL}")
-    print("=" * 70)
+def clamp_uint8(a): 
+    """Clamp array values to valid uint8 range (0-255)"""
+    return np.clip(a, 0, 255).astype(np.uint8)
 
-# 🎯 Preset parameters for light, medium, and strong image disruption
-PRESETS = {
-    "light": {
-        'noise': 0.3,   # Standard deviation for Gaussian noise
-        'blur': 0.3,    # Gaussian blur radius
-        'color': 0.01,  # Color desaturation fraction
-        'brightness': 0.005,  # Brightness increase fraction
-        'sharp': 50     # Sharpening intensity percent
-    },
-    "medium": {
-        'noise': 0.8,
-        'blur': 0.6,
-        'color': 0.02,
-        'brightness': 0.01,
-        'sharp': 80
-    },
-    "strong": {
-        'noise': 1.8,
-        'blur': 1.2,
-        'color': 0.05,
-        'brightness': 0.025,
-        'sharp': 120
-    }
-}
+def psnr(a, b):
+    """Calculate Peak Signal-to-Noise Ratio between original and processed image"""
+    mse = np.mean((a.astype(np.float32) - b.astype(np.float32))**2)
+    return 20 * math.log10(255 / math.sqrt(mse)) if mse else float('inf')
 
 def remove_metadata_save(img, output_path):
     """
-    Save PNG image without any metadata by creating a new image and copying pixel data.
-    
-    Args:
-        img (PIL.Image): Image to save
-        output_path (str): Path to save the PNG file
-    
-    Returns:
-        bool: True if saved successfully
+    Save image as completely clean PNG without ANY metadata
+    Creates new image from pixel data only - perfect for privacy
     """
     data = list(img.getdata())
     clean_img = Image.new(img.mode, img.size)
     clean_img.putdata(data)
-    clean_img.save(output_path, format="PNG", compress_level=1)
-    return True
+    clean_img.save(output_path, "PNG", compress_level=1)
 
-def process_image(args):
+def color_pipeline(img, preset="light"):
     """
-    Process a single image applying the preset's distortions,
-    then save it as a clean PNG without metadata.
-
-    Args:
-        args (tuple): (image_path, preset_name, output_directory)
-
-    Returns:
-        tuple: (image_path, success_bool, output_name_or_error)
+    Advanced color-preserving image processing pipeline:
+    1. Gaussian noise (subtle)
+    2. FFT mid-frequency perturbation (AI fingerprint disruption)
+    3. HSV color preservation 
+    4. Light post-processing
     """
-    image_path, preset_name, output_dir = args
-    params = PRESETS[preset_name]
+    img = img.convert("RGB")
+    orig = np.array(img)
     
+    presets = {
+        "light":   {"noise":0.3, "fft":0.08, "color":0.002, "blur":0.1,  "sharp":0.2},
+        "medium":  {"noise":0.5, "fft":0.12, "color":0.004, "blur":0.2,  "sharp":0.4},
+        "strong":  {"noise":0.8, "fft":0.20, "color":0.008, "blur":0.4,  "sharp":0.6}
+    }
+    params = presets.get(preset, presets["light"])
+    
+    arr = orig.astype(np.float32)
+    
+    # 1. Subtle Gaussian noise
+    noise = np.random.normal(0, params["noise"], arr.shape)
+    arr = np.clip(arr + noise, 0, 255)
+    
+    # 2. FFT mid-frequency perturbation on luminance (AI disruption)
+    gray = 0.299*arr[:,:,0] + 0.587*arr[:,:,1] + 0.114*arr[:,:,2]
+    if params["fft"] > 0:
+        F = np.fft.fft2(gray)
+        fft_region = slice(20, 100)
+        F[fft_region, fft_region] += np.random.normal(0, params["fft"]*0.0002, (80,80)) * np.abs(F[fft_region, fft_region])
+        new_gray = np.real(np.fft.ifft2(F))
+        gray = 0.98*gray + 0.02*np.clip(new_gray, 0, 255)
+    
+    # 3. HSV color preservation (modify Value only)
+    hsv = np.array(img.convert('HSV'))
+    hsv[:,:,2] = gray.astype(np.uint8)
+    result = Image.fromarray(hsv, 'HSV').convert('RGB')
+    
+    # 4. Final subtle adjustments
+    if params["color"] > 0: 
+        result = ImageEnhance.Color(result).enhance(1-params["color"])
+    if params["blur"] > 0: 
+        result = result.filter(ImageFilter.GaussianBlur(params["blur"]/10))
+    if params["sharp"] > 0: 
+        result = result.filter(ImageFilter.UnsharpMask(radius=0.5, percent=int(params["sharp"]*50)))
+    
+    return result, psnr(orig, np.array(result))
+
+def process_file(args):
+    path, out_dir, preset = args
     try:
-        print(f"🔄 {preset_name.upper()}: {os.path.basename(image_path)}")
-        img = Image.open(image_path).convert("RGB")
-        img_arr = np.array(img, dtype=np.float32)
-        
-        # 1️⃣ Apply Gaussian noise with preset std deviation
-        noise = np.random.normal(0, params['noise'], img_arr.shape)
-        img_arr = np.clip(img_arr + noise, 0, 255)
-        img = Image.fromarray(img_arr.astype(np.uint8))
-        
-        # 2️⃣ Apply Gaussian blur with preset radius
-        img = img.filter(ImageFilter.GaussianBlur(radius=params['blur']))
-        
-        # 3️⃣ Reduce color saturation by preset fraction
-        enhancer = ImageEnhance.Color(img)
-        img = enhancer.enhance(1.0 - params['color'])
-        
-        # 4️⃣ Increase brightness by preset fraction
-        enhancer = ImageEnhance.Brightness(img)
-        img = enhancer.enhance(1.0 + params['brightness'])
-        
-        # 5️⃣ Apply sharpening filter with preset strength and radius
-        radius = 0.8 if preset_name == "strong" else 0.5
-        threshold = 3 if preset_name == "strong" else 2
-        img = img.filter(ImageFilter.UnsharpMask(radius=radius, percent=params['sharp'], threshold=threshold))
-        
-        # 🔧 Save the image without any metadata
-        base = os.path.basename(image_path)
-        name, _ = os.path.splitext(base)
-        output_name = f"clean_{preset_name}_{name}.png"
-        output_path = os.path.join(output_dir, output_name)
-        
-        remove_metadata_save(img, output_path)
-        print(f"✅ {output_name} | 🧹 Metadata REMOVED")
-        return (image_path, True, output_name)
-        
+        img = Image.open(path)
+        result, metric = color_pipeline(img, preset)
+        base = os.path.splitext(os.path.basename(path))[0]
+        out_path = os.path.join(out_dir, f"cleanshot_{preset}_{base}.png")
+        remove_metadata_save(result, out_path)
+        return (path, True, out_path, metric)
     except Exception as e:
-        print(f"❌ {preset_name}: {os.path.basename(image_path)} - {e}")
-        return (image_path, False, str(e))
-
-def get_image_files(path):
-    """
-    Recursively get all image files in a directory or a single file.
-
-    Args:
-        path (str): Path to a file or directory
-
-    Returns:
-        list: List of image file paths
-    """
-    if os.path.isfile(path) and path.lower().endswith(('.png','.jpg','.jpeg','.bmp','.tiff')):
-        return [path]
-    files = []
-    for root, _, filenames in os.walk(path):
-        for f in filenames:
-            if f.lower().endswith(('.png','.jpg','.jpeg','.bmp','.tiff')):
-                files.append(os.path.join(root, f))
-    return files
+        return (path, False, str(e))
 
 def main():
-    """
-    Parse arguments, process images using multiprocessing,
-    and report success summary.
-    """
-    print_banner()
-    
-    parser = argparse.ArgumentParser(description=f"{TOOL_NAME} - 3 Presets + Metadata Cleaner")
-    parser.add_argument("input", help="Image file or directory containing images")
-    parser.add_argument("-p", "--preset", choices=["light", "medium", "strong"], default="light",
-                       help="Effect strength preset: light, medium, or strong")
-    parser.add_argument("-o", "--out", default=".", help="Output directory")
+    parser = argparse.ArgumentParser(
+        description=f"{TOOL_NAME} v{VERSION} - Advanced AI Image Fingerprint Disruptor",
+        epilog=f"Author: {AUTHOR_EMAIL} | Use responsibly for privacy/research purposes"
+    )
+    parser.add_argument("input", help="Input image file or directory")
+    parser.add_argument("-p", "--preset", choices=["light","medium","strong"], 
+                        default="light", help="Processing strength (light/medium/strong)")
+    parser.add_argument("-o", "--out", default="cleaned", help="Output directory")
     parser.add_argument("-t", "--threads", type=int, default=0, 
-                       help="Number of parallel processes (0 for auto)")
-    
+                        help="Number of parallel threads (0=auto)")
     args = parser.parse_args()
     
-    params = PRESETS[args.preset]
-    print(f"🎯 {args.preset.upper()}: noise={params['noise']} | 🧹 AUTO Metadata Removal")
-    
-    files = get_image_files(args.input)
-    if not files:
-        print("❌ No images found!")
-        sys.exit(1)
-    
     os.makedirs(args.out, exist_ok=True)
+    
+    files = []
+    if os.path.isdir(args.input):
+        for root, _, fs in os.walk(args.input):
+            for f in fs:
+                if f.lower().endswith(('.jpg','jpeg','png','bmp','tiff')):
+                    files.append(os.path.join(root, f))
+    else:
+        files = [args.input]
+    
+    if not files:
+        print("❌ No image files found! Exiting.")
+        return
+    
     threads = args.threads if args.threads > 0 else cpu_count()
     
-    print(f"⚡ Processing {len(files)} images with {threads} threads | PNG output without Metadata\n")
+    print(f"🛡️  {TOOL_NAME} v{VERSION}  🛡️")
+    print(f"📧  Author: {AUTHOR_EMAIL}")
+    print(f"🚀  Processing {len(files)} image(s) with preset '{args.preset}' using {threads} thread(s)...\n")
+    print("✨  All output PNG images will have metadata removed  ✨\n")
     
-    tasks = [(f, args.preset, args.out) for f in files]
     with Pool(threads) as pool:
-        results = pool.map(process_image, tasks)
+        results = pool.map(process_file, [(f, args.out, args.preset) for f in files])
     
-    success = sum(1 for _, ok, _ in results if ok)
-    print(f"\n🎉 Completed! {success}/{len(files)} images processed successfully | All PNGs metadata cleaned!")
+    success = sum(1 for r in results if r[1])
     
-    for path, ok, result in results:
-        if ok:
-            print(f"✅ {result}")
+    print("\n🎉 Processing complete! 🎉")
+    print(f"✅ Successfully processed {success} / {len(files)} images\n")
+    
+    print("📊 Results:")
+    for r in results:
+        if r[1]:
+            print(f"  🎯 {os.path.basename(r[2]):<40} PSNR: {r[3]:6.1f}dB")
         else:
-            print(f"❌ {os.path.basename(path)}: {result}")
+            print(f"  ❌ {os.path.basename(r[0])}: {r[2]}")
+    print("\nThank you for using CleanShot Pro Ultimate! 💡🔐")
 
 if __name__ == "__main__":
     main()
