@@ -189,7 +189,3 @@ CleanShot Pro is part of the new era of
 AI vs AI Cybersecurity.
 
 Use it responsibly.
-
----
-
-# إذا تريد 
