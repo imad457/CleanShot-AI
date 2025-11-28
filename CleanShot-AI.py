@@ -1,7 +1,7 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 """
-CleanShot AI Pro v1.2 - Light/Medium/Strong presets + Automatic Metadata Removal
+CleanShot-AI.py (Pro) v1.2 - Light/Medium/Strong presets + Automatic Metadata Removal
 Author: imsecure4@gmail.com
 ✅ Automatically removes all Metadata + saves as 100% clean PNG
 """
