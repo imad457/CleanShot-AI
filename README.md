@@ -9,9 +9,9 @@ CleanShot Pro v2.3
 
 ---
 
-## 🛡️ What is CleanShot Pro Ultimate?
+## 🛡️ What is CleanShot Pro?
 
-CleanShot Pro Ultimate is an advanced image preprocessing tool designed to  
+CleanShot Pro is an advanced image preprocessing tool designed to  
 **disrupt AI-based fingerprinting** while keeping the image visually identical  
 to the human eye.
 
