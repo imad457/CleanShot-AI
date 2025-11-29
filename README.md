@@ -19,11 +19,6 @@ It adds **minimal adversarial perturbations**, removes **all metadata**,
 and applies subtle transformations that degrade AI detectors without  
 destroying image quality.
 
-This project is part of the field known as:
-
-### **Adversarial Image Perturbation (AIP)**  
-(AI vs AI privacy protection)
-
 ---
 
 ## ✨ Key Features
