@@ -180,12 +180,3 @@ Multi-model resistance mode
 For collaboration, research use, or improvements:
 imsecure4@gmail.com
 
-
----
-
-🛡️ Final Note
-
-CleanShot Pro is part of the new era of
-AI vs AI Cybersecurity.
-
-Use it responsibly.
